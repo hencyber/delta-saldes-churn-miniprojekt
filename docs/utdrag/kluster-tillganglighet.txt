@@ -1,0 +1,14 @@
+Tillgänglighet under rolling update i kursens kluster (namespace henrik-goransson).
+Anrop mot /health var 0,2 s.
+
+Inifrån klustret (pod i samma namespace -> http://churn/health), uppdatering 1bd2a1c -> f50f5f1:
+  lyckade=300 misslyckade=0
+
+Utifrån via internet (https://henrik-goransson.89-167-53-206.sslip.io/health):
+  under uppdatering 1bd2a1c -> f50f5f1:      lyckade=299 misslyckade=1
+  under tillbakarullning f50f5f1 -> 1bd2a1c: lyckade=299 misslyckade=1
+  utan någon uppdatering (jämförelse):        lyckade=296 misslyckade=4
+
+Slutsats: uppdateringen ger inget avbrott. De enstaka felen utifrån är nätverksfel mellan
+min dator och servern (de förekommer lika ofta utan uppdatering, och svarskoden är 000 =
+inget svar alls, inte ett fel från tjänsten).

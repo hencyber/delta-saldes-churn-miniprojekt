@@ -1,0 +1,31 @@
+$ kubectl config current-context && kubectl get pods
+mlops-ht26
+No resources found in henrik-goransson namespace.
+$ kubectl apply -f k8s/    # version 1: image 1bd2a1c
+deployment.apps/churn created
+service/churn created
+ingress.networking.k8s.io/churn created
+$ kubectl rollout status deployment/churn
+Waiting for deployment "churn" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "churn" rollout to finish: 1 of 2 updated replicas are available...
+deployment "churn" successfully rolled out
+$ kubectl get pods,svc,ingress
+NAME                            READY   STATUS    RESTARTS   AGE
+pod/churn-84447fc467-6jkh6      1/1     Running   0          24s
+pod/churn-84447fc467-bvz2f      1/1     Running   0          24s
+pod/cm-acme-http-solver-m6r2w   1/1     Running   0          19s
+
+NAME                                TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+service/churn                       ClusterIP   10.43.108.43   <none>        80/TCP     23s
+service/cm-acme-http-solver-6jts9   ClusterIP   10.43.131.80   <none>        8089/TCP   19s
+
+NAME                                                  CLASS     HOSTS                                     ADDRESS         PORTS     AGE
+ingress.networking.k8s.io/churn                       traefik   henrik-goransson.89-167-53-206.sslip.io   89.167.53.206   80, 443   23s
+ingress.networking.k8s.io/cm-acme-http-solver-dnxqc   traefik   henrik-goransson.89-167-53-206.sslip.io   89.167.53.206   80        19s
+$ kubectl get certificate
+NAME        READY   SECRET      AGE
+churn-tls   True    churn-tls   31s
+$ curl -k https://henrik-goransson.89-167-53-206.sslip.io/health
+{"status":"ok","commit":"1bd2a1cb9ee1d218603a68cf40a5988d77c81234","roc_auc":0.7886713693165307,"data_sha256":"51df885d247889baa04dce12ed4fc8b55faccefe75b00afa3342e2d731c481bb"}
+$ curl -k -X POST https://henrik-goransson.89-167-53-206.sslip.io/predict ...
+{"risk":0.594}
