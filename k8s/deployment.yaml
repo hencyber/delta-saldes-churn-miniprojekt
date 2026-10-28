@@ -44,10 +44,12 @@ spec:
             - containerPort: 8000
           # Tjänsten använder ca 130 MiB. Requests är det klustret reserverar,
           # limits är taket. Över minnestaket startas containern om.
+          # Under en uppdatering körs tre pods (maxSurge 1), och kursklustrets kvot är
+          # 384 MiB i requests. 96 MiB per pod ger 288 MiB och lämnar plats för annat.
           resources:
             requests:
               cpu: 50m
-              memory: 128Mi
+              memory: 96Mi
             limits:
               cpu: 500m
               memory: 256Mi
