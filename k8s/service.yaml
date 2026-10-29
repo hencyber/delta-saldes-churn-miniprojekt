@@ -1,0 +1,17 @@
+# Ger poddarna ett gemensamt namn och en fast adress i klustret.
+# Trafiken fördelas på de poddar som är redo (readinessProbe).
+#
+# Lokalt:  kubectl port-forward service/churn 8000:80
+#          curl localhost:8000/health
+apiVersion: v1
+kind: Service
+metadata:
+  name: churn
+  labels:
+    app: churn
+spec:
+  selector:
+    app: churn
+  ports:
+    - port: 80
+      targetPort: 8000

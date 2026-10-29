@@ -1,0 +1,20 @@
+$ kubectl rollout undo deployment/churn
+deployment.apps/churn rolled back
+$ kubectl rollout status deployment/churn
+Waiting for deployment "churn" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "churn" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "churn" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "churn" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "churn" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "churn" rollout to finish: 1 old replicas are pending termination...
+deployment "churn" successfully rolled out
+$ kubectl rollout history deployment/churn
+deployment.apps/churn 
+REVISION  CHANGE-CAUSE
+2         version 2: image f50f5f1
+3         version 1: image 1bd2a1c
+
+$ kubectl get deployment churn -o jsonpath={..image}
+ghcr.io/hencyber/delta-saldes-churn:1bd2a1cb9ee1d218603a68cf40a5988d77c81234
+$ curl -k https://henrik-goransson.89-167-53-206.sslip.io/health
+{"status":"ok","commit":"1bd2a1cb9ee1d218603a68cf40a5988d77c81234","roc_auc":0.7886713693165307,"data_sha256":"51df885d247889baa04dce12ed4fc8b55faccefe75b00afa3342e2d731c481bb"}

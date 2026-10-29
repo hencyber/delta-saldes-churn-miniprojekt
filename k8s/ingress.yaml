@@ -1,0 +1,32 @@
+# Gör tjänsten nåbar från internet i kursens kluster, på min egen adress.
+# Traefik tar emot trafiken och skickar den till servicen churn.
+# cert-manager skapar ett https-certifikat automatiskt via annotationen.
+#
+# letsencrypt-staging medan jag testar (curl -k, certifikatet är inte betrott),
+# letsencrypt när allt fungerar. Kontroll: kubectl get certificate ska visa True.
+#
+# I kind finns ingen Traefik, där används port-forward i stället.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: churn
+  labels:
+    app: churn
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [henrik-goransson.89-167-53-206.sslip.io]
+      secretName: churn-tls
+  rules:
+    - host: henrik-goransson.89-167-53-206.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: churn
+                port:
+                  number: 80

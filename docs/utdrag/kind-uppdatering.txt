@@ -1,0 +1,23 @@
+$ kubectl apply -f k8s/deployment.yaml   # version 2: image f50f5f1
+deployment.apps/churn configured
+$ kubectl rollout status deployment/churn
+Waiting for deployment "churn" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "churn" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "churn" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "churn" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "churn" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "churn" rollout to finish: 1 old replicas are pending termination...
+deployment "churn" successfully rolled out
+$ kubectl get pods
+NAME                     READY   STATUS        RESTARTS   AGE
+churn-684c56594c-flww5   1/1     Terminating   0          57s
+churn-75c478f89f-s94f5   1/1     Running       0          15s
+churn-75c478f89f-zhgtv   1/1     Running       0          6s
+$ kubectl rollout history deployment/churn
+deployment.apps/churn 
+REVISION  CHANGE-CAUSE
+1         version 1: image 1bd2a1c
+2         version 2: image f50f5f1
+
+$ curl localhost:8090/health
+{"status":"ok","commit":"f50f5f195de11c9b5b01cf7a84dde84c4cfc1293","roc_auc":0.7886713693165307,"data_sha256":"51df885d247889baa04dce12ed4fc8b55faccefe75b00afa3342e2d731c481bb"}

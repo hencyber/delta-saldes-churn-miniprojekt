@@ -1,0 +1,82 @@
+# Saldes churnmodell som tjänst i Kubernetes.
+#
+# Imagen pekas ut med commitens SHA, aldrig latest, så att det alltid går att säga
+# exakt vilken commit och vilken modell som körs. Byt taggen för att rulla ut en ny version.
+#
+# Lokalt i kind:   kubectl apply -f k8s/
+# Status:          kubectl rollout status deployment/churn
+# Tillbaka:        kubectl rollout undo deployment/churn
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: churn
+  labels:
+    app: churn
+spec:
+  replicas: 2
+  # Hur många gamla versioner som sparas för rollout undo.
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: churn
+  # Rolling update: en ny pod i taget, och ingen gammal tas bort förrän den nya är redo.
+  # Tjänsten svarar alltså hela tiden under en uppdatering.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: churn
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: churn
+          image: ghcr.io/hencyber/delta-saldes-churn:f50f5f195de11c9b5b01cf7a84dde84c4cfc1293
+          ports:
+            - containerPort: 8000
+          # Tjänsten använder ca 130 MiB. Requests är det klustret reserverar,
+          # limits är taket. Över minnestaket startas containern om.
+          # Under en uppdatering körs tre pods (maxSurge 1), och kursklustrets kvot är
+          # 384 MiB i requests. 96 MiB per pod ger 288 MiB och lämnar plats för annat.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          # Redo: /health svarar 503 tills modellen är laddad, så ingen trafik
+          # skickas till en pod som inte kan svara.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 3
+          # Lever: slutar /health svara startar Kubernetes om containern.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          # En pod som stängs får trafik en kort stund till, innan servicen har slutat
+          # skicka till den. Pausen gör att de anropen hinner besvaras under en uppdatering.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
