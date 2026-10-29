@@ -3,6 +3,12 @@
 > *Saldes Mobil AB är ett påhittat företag och all kunddata är fiktiv. Repot är en övning i
 > kursen Kontinuerlig integration och leverans (MLOps25, Nackademin).*
 
+**Det här är mitt mini-projekt** (Henrik Göransson, Delta Team). Repot är en kopia av teamets
+labbrepo [hencyber/delta-saldes-churn](https://github.com/hencyber/delta-saldes-churn), och
+jag har byggt vidare med utrullning till Kubernetes. Det nya beskrivs under
+[Mini-projekt: utrullning till Kubernetes](#mini-projekt-utrullning-till-kubernetes) längst ner.
+Texten fram till dess är lärarens mall och teamets beskrivning av pipelinen.
+
 ## Välkommen till teamet
 
 Hej och välkommen!
@@ -75,6 +81,9 @@ python -m churn.score           # skriver outputs/ringlista.csv
 | `src/churn/app.py`, `Dockerfile` | API:t och imagen som serverar modellen |
 | `arenden/` | Ärendena, och `skapa.sh` som gör dem till issues |
 | `.github/workflows/ci.yml` | Vårt CI |
+| `k8s/` | Deployment, service och ingress för tjänsten (mini-projektet) |
+| `docs/rapport.md` | Utrullningsstrategi och plan för drift (mini-projektet) |
+| `docs/utdrag/` | Terminalutdrag från uppdatering och tillbakarullning (mini-projektet) |
 
 ## Så fungerar pipelinen
 
@@ -91,12 +100,15 @@ Jobben körs i den här ordningen:
 4. `utvardera` laddar ner samma artefakt, visar mätvärdena i körningens Summary och stoppar
    pipelinen om ROC AUC är under 0,70.
 5. `docker` bygger en image med samma modell, smoke-testar `/health` och `/predict` och pushar
-   imagen för amd64 och arm64 till `ghcr.io/hencyber/delta-saldes-churn:<commit-SHA>`. Push görs
-   bara från main.
+   imagen för amd64 och arm64 till `ghcr.io/hencyber/delta-saldes-churn-miniprojekt:<commit-SHA>`.
+   Push görs bara från main.
+6. `deploy` (mini-projektet) rullar ut imagen till kursens Kubernetes-kluster. Se nedan.
 
-Om ett jobb fallerar hoppas alla jobb efter det över. `main` är skyddad: varje ändring går via en
-pull request som en teamkamrat godkänner, och `datakontroll`, alla tre `test`-jobb, `utvardera`
-och `docker` måste vara gröna innan den kan slås ihop.
+Om ett jobb fallerar hoppas alla jobb efter det över. I teamets repo är `main` skyddad: varje
+ändring går via en pull request som en teamkamrat godkänner, och `datakontroll`, alla tre
+`test`-jobb, `utvardera` och `docker` måste vara gröna innan den kan slås ihop. I mitt mini-repo
+jobbar jag ensam, så där går ändringar via pull requests utan granskning från någon annan.
+Godkännandet som krävs är det före produktion.
 
 ### Kvalitetströskeln
 
@@ -120,3 +132,48 @@ python -m churn.model
 docker build -t churn .
 docker run -p 8000:8000 churn      # http://localhost:8000/health
 ```
+
+## Mini-projekt: utrullning till Kubernetes
+
+Tjänsten körs i två miljöer: lokalt i kind och i kursens kluster, där den svarar på
+<https://henrik-goransson.89-167-53-206.sslip.io/health>. `/health` visar vilken commit som körs.
+
+**Manifesten** i `k8s/`:
+
+- `deployment.yaml`: två repliker, imagen utpekad med commitens SHA (aldrig `latest`),
+  readiness och liveness mot `/health`, resursgränser och `preStop` som väntar 5 sekunder innan
+  en pod stängs.
+- `service.yaml`: ClusterIP på port 80 till containerns port 8000.
+- `ingress.yaml`: Traefik och ett certifikat från Let's Encrypt via cert-manager.
+
+**Utrullningsstrategi:** rolling update med `maxSurge: 1` och `maxUnavailable: 0`. En ny pod
+startar och måste vara redo innan en gammal tas bort, så tjänsten svarar under hela bytet. Varför
+jag valde den och inte blue/green eller canary står i [docs/rapport.md](docs/rapport.md).
+
+**Utrullning från pipelinen:** jobbet `deploy` körs bara från main och bara efter att `docker`
+har byggt, smoke-testat och pushat imagen. Det körs i miljön `produktion`, som kräver mitt
+godkännande innan jobbet startar. Nyckeln till klustret ligger som hemligheten `KUBECONFIG` i
+miljön, så den kan bara läsas av ett godkänt jobb. Jobbet byter image i manifestet till den här
+körningens SHA, väntar på `kubectl rollout status` och kontrollerar att `/health` svarar med den
+nya commiten. Annars rullar det tillbaka.
+
+**Rulla tillbaka för hand:**
+
+```bash
+kubectl rollout history deployment/churn   # vilka versioner som finns
+kubectl rollout undo deployment/churn      # tillbaka till förra versionen
+kubectl rollout status deployment/churn
+curl https://henrik-goransson.89-167-53-206.sslip.io/health
+```
+
+**Köra i kind:**
+
+```bash
+kind create cluster --name mini
+kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml
+kubectl port-forward service/churn 8000:80   # http://localhost:8000/health
+```
+
+Utdrag från uppdatering, tillbakarullning och mätning av tillgänglighet i båda miljöerna ligger i
+`docs/utdrag/`. Plan för drift (hur jag upptäcker en sämre modell eller förändrad data, och vad som
+händer då) står i [docs/rapport.md](docs/rapport.md).
