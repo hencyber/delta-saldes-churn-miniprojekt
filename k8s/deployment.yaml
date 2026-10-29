@@ -42,14 +42,15 @@ spec:
           image: ghcr.io/hencyber/delta-saldes-churn:f50f5f195de11c9b5b01cf7a84dde84c4cfc1293
           ports:
             - containerPort: 8000
-          # Tjänsten använder ca 130 MiB. Requests är det klustret reserverar,
-          # limits är taket. Över minnestaket startas containern om.
+          # kubectl top pods visar ca 123 MiB i vila. Requests är det klustret reserverar
+          # och ska täcka det, limits är taket. Över minnestaket startas containern om.
           # Under en uppdatering körs tre pods (maxSurge 1), och kursklustrets kvot är
-          # 384 MiB i requests. 96 MiB per pod ger 288 MiB och lämnar plats för annat.
+          # 384 MiB i requests. 128 MiB per pod ger exakt 384 MiB. En pod som stängs
+          # (preStop 5 s) räknas tills den är borta, så den nya kan få vänta några sekunder.
           resources:
             requests:
               cpu: 50m
-              memory: 96Mi
+              memory: 128Mi
             limits:
               cpu: 500m
               memory: 256Mi
