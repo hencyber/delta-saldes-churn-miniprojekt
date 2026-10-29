@@ -192,3 +192,61 @@ jobs:
           push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
           tags: ${{ env.IMAGE }}
           cache-from: type=gha
+
+  deploy:
+    # Rullar ut exakt den image som docker-jobbet just byggde, smoke-testade och pushade.
+    needs: docker
+    # Bara från main, aldrig från en pull request eller en annan gren.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # Miljön produktion kräver att jag godkänner innan jobbet startar (Settings → Environments).
+    # Klusterfilen ligger som hemlighet i miljön, så bara godkända jobb kan läsa den.
+    environment:
+      name: produktion
+      url: https://henrik-goransson.89-167-53-206.sslip.io/health
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+      ADRESS: https://henrik-goransson.89-167-53-206.sslip.io
+    steps:
+      - uses: actions/checkout@v7
+
+      # Hemligheten skrivs till en fil som bara finns under jobbet. Den skrivs aldrig ut i loggen.
+      - name: Anslut till kursens kluster
+        env:
+          KUBECONFIG_INNEHALL: ${{ secrets.KUBECONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          printf '%s' "$KUBECONFIG_INNEHALL" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get deployment churn
+
+      # Manifestet pekar ut en image med SHA. Här byts den mot imagen från den här körningen,
+      # så att det blir en enda rolling update till exakt den versionen.
+      - name: Rulla ut
+        run: |
+          sed "s#image: .*#image: $IMAGE#" k8s/deployment.yaml | kubectl apply -f -
+          kubectl apply -f k8s/service.yaml -f k8s/ingress.yaml
+          kubectl annotate deployment churn kubernetes.io/change-cause="pipeline: ${GITHUB_SHA::7}" --overwrite
+          kubectl rollout status deployment/churn --timeout=300s
+
+      # Klar först när tjänsten svarar och /health visar att det är den nya commiten.
+      # Anropet går via internet, så ett enstaka nätverksfel får inte fälla utrullningen.
+      - name: Kontrollera att den nya versionen svarar
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sk -m 5 "$ADRESS/health" > health.json && grep -q "$GITHUB_SHA" health.json; then
+              cat health.json
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Tjänsten svarar inte med commit $GITHUB_SHA"
+          cat health.json
+          exit 1
+
+      # Gick utrullningen inte igenom rullar vi tillbaka till förra versionen.
+      - name: Rulla tillbaka om utrullningen fallerade
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/churn
+          kubectl rollout status deployment/churn --timeout=300s
