@@ -10,7 +10,7 @@ i `k8s/`: en deployment med två repliker, en service och en ingress med certifi
 Encrypt. Imagen pekas ut med commitens SHA, aldrig `latest`, så att det alltid går att säga vilken
 commit och vilken modell som körs. `/health` svarar dessutom med commit, ROC AUC och datans sha256.
 
-Deploymenten har resursgränser (50m CPU och 96 Mi minne reserverat, tak 500m och 256 Mi) och två
+Deploymenten har resursgränser (50m CPU och 128 Mi minne reserverat, tak 500m och 256 Mi) och två
 probes mot `/health`. Readiness styr när en pod får trafik: `/health` svarar 503 tills modellen är
 laddad, så ingen trafik skickas till en pod som inte kan svara. Liveness startar om containern om
 den slutar svara.
@@ -30,14 +30,17 @@ alltså hela tiden minst två pods som kan svara.
 Varför inte de andra:
 
 - **Blue/green** kräver två fulla uppsättningar pods samtidigt. Min kvot i kursens kluster är 384 Mi
-  reserverat minne, och tjänsten använder runt 130 Mi per pod, så det blir trångt. Fördelen, att kunna
+  reserverat minne, och tjänsten använder runt 123 Mi per pod i vila. Fyra pods får inte plats. Fördelen, att kunna
   byta tillbaka direkt, får jag ändå genom `kubectl rollout undo`.
 - **Canary** passar när man vill pröva en ny modell på en del av trafiken och jämföra resultat. Det
   kräver att man kan styra hur stor andel som går till den nya versionen och mäta utfallet. Ringlistan
   har få användare och utfallet (om kunden slutar) syns först efter flera veckor, så en canary skulle
   inte ge något svar under själva utrullningen.
 
-Rolling update ryms i kvoten (tre pods under uppdateringen, 288 Mi) och ger ingen nertid, vilket jag mätte.
+Rolling update ryms i kvoten (tre pods under uppdateringen, 3 × 128 = 384 Mi) och ger ingen nertid,
+vilket jag mätte. Först reserverade jag 96 Mi, men `kubectl top pods` visade att en pod använder
+123 Mi i vila. Reservationen ska täcka det, annars kan en pod hamna på en nod som inte har plats för
+den, så jag höjde till 128 Mi. Mätningarna nedan gjordes med 96 Mi.
 
 ### Mätning
 
